@@ -81,6 +81,7 @@ resource storageAccount 'Microsoft.Storage/storageAccounts@2023-05-01' = {
   properties: {
     accessTier: 'Hot'
     allowBlobPublicAccess: false
+    allowSharedKeyAccess: true
     minimumTlsVersion: 'TLS1_2'
   }
 }
@@ -158,6 +159,9 @@ resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
       name: 'PerGB2018'
     }
     retentionInDays: 30
+    features: {
+      disableLocalAuth: false
+    }
   }
 }
 
