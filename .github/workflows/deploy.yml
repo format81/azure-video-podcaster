@@ -1,0 +1,70 @@
+name: Build, Test & Deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  PYTHON_VERSION: "3.12"
+  AZURE_RESOURCE_GROUP: rg-video-podcaster
+  AZURE_LOCATION: westeurope
+  BASE_NAME: videopodcaster
+
+jobs:
+  test:
+    name: Lint & Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pytest httpx
+
+      - name: Run tests
+        env:
+          AZURE_SPEECH_KEY: "test-key"
+          AZURE_SPEECH_REGION: "westeurope"
+        run: pytest tests/ -v
+
+  deploy:
+    name: Deploy to Azure
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Deploy infrastructure
+        uses: azure/arm-deploy@v2
+        id: infra
+        with:
+          resourceGroupName: ${{ env.AZURE_RESOURCE_GROUP }}
+          template: infra/main.bicep
+          parameters: baseName=${{ env.BASE_NAME }} location=${{ env.AZURE_LOCATION }}
+
+      - name: Build and push to ACR
+        run: |
+          ACR_NAME=$(echo "${{ steps.infra.outputs.acrLoginServer }}" | cut -d. -f1)
+          az acr login --name "$ACR_NAME"
+          az acr build --registry "$ACR_NAME" --image "${{ env.BASE_NAME }}:${{ github.sha }}" --file Dockerfile .
+
+      - name: Update Container App
+        run: |
+          az containerapp update \
+            --name "${{ steps.infra.outputs.containerAppName }}" \
+            --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
+            --image "${{ steps.infra.outputs.acrLoginServer }}/${{ env.BASE_NAME }}:${{ github.sha }}"

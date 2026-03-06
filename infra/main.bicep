@@ -1,7 +1,8 @@
-// ══════════════════════════════════════════════════════════════
+// ======================================================================
 // Azure Video Podcaster - Infrastructure as Code (Bicep)
-// Deploys: Speech Service + Container Registry + Container App
-// ══════════════════════════════════════════════════════════════
+// Deploys: Speech Service + Storage + Container Registry + Container App
+//          + Azure OpenAI (optional)
+// ======================================================================
 
 targetScope = 'resourceGroup'
 
@@ -19,16 +20,29 @@ param location string = 'westeurope'
 @description('Container image tag')
 param imageTag string = 'latest'
 
-// ─── Variables ──────────────────────────────────────────────
+@description('Deploy Azure OpenAI Service')
+param deployOpenAI bool = false
+
+// --- Variables ---
 
 var uniqueSuffix = uniqueString(resourceGroup().id)
 var speechName = '${baseName}-speech-${uniqueSuffix}'
+var storageName = replace('${baseName}st${uniqueSuffix}', '-', '')
 var acrName = replace('${baseName}acr${uniqueSuffix}', '-', '')
 var logAnalyticsName = '${baseName}-logs-${uniqueSuffix}'
 var containerEnvName = '${baseName}-env-${uniqueSuffix}'
 var containerAppName = '${baseName}-app'
+var openaiName = '${baseName}-openai-${uniqueSuffix}'
+var managedIdentityName = '${baseName}-id-${uniqueSuffix}'
 
-// ─── Speech Service (S0 required for Avatar) ────────────────
+// --- Managed Identity ---
+
+resource managedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
+  name: managedIdentityName
+  location: location
+}
+
+// --- Speech Service (S0 required for Avatar) ---
 
 resource speechService 'Microsoft.CognitiveServices/accounts@2024-10-01' = {
   name: speechName
@@ -42,7 +56,72 @@ resource speechService 'Microsoft.CognitiveServices/accounts@2024-10-01' = {
   }
 }
 
-// ─── Container Registry ─────────────────────────────────────
+// Cognitive Services User role for managed identity on Speech Service
+resource speechRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(speechService.id, managedIdentity.id, 'cognitive-services-user')
+  scope: speechService
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'a97b65f3-24c7-4388-baec-2e87135dc908')
+    principalId: managedIdentity.properties.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+// --- Storage Account ---
+
+resource storageAccount 'Microsoft.Storage/storageAccounts@2023-05-01' = {
+  name: storageName
+  location: location
+  sku: {
+    name: 'Standard_LRS'
+  }
+  kind: 'StorageV2'
+  properties: {
+    accessTier: 'Hot'
+    allowBlobPublicAccess: false
+    minimumTlsVersion: 'TLS1_2'
+  }
+}
+
+resource blobService 'Microsoft.Storage/storageAccounts/blobServices@2023-05-01' = {
+  parent: storageAccount
+  name: 'default'
+}
+
+resource podcastContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = {
+  parent: blobService
+  name: 'podcast-videos'
+  properties: {
+    publicAccess: 'None'
+  }
+}
+
+// Storage Blob Data Contributor role for managed identity
+resource storageRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(storageAccount.id, managedIdentity.id, 'storage-blob-contributor')
+  scope: storageAccount
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')
+    principalId: managedIdentity.properties.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+// --- Azure OpenAI (optional) ---
+
+resource openaiService 'Microsoft.CognitiveServices/accounts@2024-10-01' = if (deployOpenAI) {
+  name: openaiName
+  location: location
+  kind: 'OpenAI'
+  sku: {
+    name: 'S0'
+  }
+  properties: {
+    publicNetworkAccess: 'Enabled'
+  }
+}
+
+// --- Container Registry ---
 
 resource acr 'Microsoft.ContainerRegistry/registries@2023-07-01' = {
   name: acrName
@@ -55,7 +134,7 @@ resource acr 'Microsoft.ContainerRegistry/registries@2023-07-01' = {
   }
 }
 
-// ─── Log Analytics Workspace ────────────────────────────────
+// --- Log Analytics Workspace ---
 
 resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
   name: logAnalyticsName
@@ -68,7 +147,7 @@ resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
   }
 }
 
-// ─── Container Apps Environment ─────────────────────────────
+// --- Container Apps Environment ---
 
 resource containerEnv 'Microsoft.App/managedEnvironments@2024-03-01' = {
   name: containerEnvName
@@ -84,11 +163,17 @@ resource containerEnv 'Microsoft.App/managedEnvironments@2024-03-01' = {
   }
 }
 
-// ─── Container App ──────────────────────────────────────────
+// --- Container App ---
 
 resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
   name: containerAppName
   location: location
+  identity: {
+    type: 'UserAssigned'
+    userAssignedIdentities: {
+      '${managedIdentity.id}': {}
+    }
+  }
   properties: {
     managedEnvironmentId: containerEnv.id
     configuration: {
@@ -114,6 +199,10 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
           name: 'speech-key'
           value: speechService.listKeys().key1
         }
+        {
+          name: 'storage-connection'
+          value: 'DefaultEndpointsProtocol=https;AccountName=${storageAccount.name};AccountKey=${storageAccount.listKeys().keys[0].value};EndpointSuffix=core.windows.net'
+        }
       ]
     }
     template: {
@@ -133,6 +222,14 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
             {
               name: 'AZURE_SPEECH_REGION'
               value: location
+            }
+            {
+              name: 'AZURE_STORAGE_CONNECTION_STRING'
+              secretRef: 'storage-connection'
+            }
+            {
+              name: 'AZURE_STORAGE_CONTAINER'
+              value: 'podcast-videos'
             }
             {
               name: 'AVATAR_CHARACTER'
@@ -171,10 +268,13 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
   }
 }
 
-// ─── Outputs ────────────────────────────────────────────────
+// --- Outputs ---
 
 output speechServiceName string = speechService.name
 output speechRegion string = location
+output storageAccountName string = storageAccount.name
 output acrLoginServer string = acr.properties.loginServer
 output containerAppUrl string = 'https://${containerApp.properties.configuration.ingress.fqdn}'
 output containerAppName string = containerApp.name
+output managedIdentityId string = managedIdentity.id
+output openaiServiceName string = deployOpenAI ? openaiService.name : 'not-deployed'
