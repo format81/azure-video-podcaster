@@ -12,10 +12,13 @@ API_VERSION = "2024-08-01"
 STORAGE_CONNECTION_STRING = os.getenv("AZURE_STORAGE_CONNECTION_STRING", "")
 STORAGE_CONTAINER = os.getenv("AZURE_STORAGE_CONTAINER", "podcast-videos")
 
-# Azure OpenAI (optional)
+# Azure OpenAI (optional - auth via Managed Identity, API key is optional fallback)
 AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT", "")
-AZURE_OPENAI_KEY = os.getenv("AZURE_OPENAI_KEY", "")
+AZURE_OPENAI_KEY = os.getenv("AZURE_OPENAI_KEY", "")  # Optional: leave empty to use Managed Identity
 AZURE_OPENAI_DEPLOYMENT = os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-4o")
+
+# Managed Identity (for Entra ID auth to Azure OpenAI, Storage, etc.)
+MANAGED_IDENTITY_CLIENT_ID = os.getenv("AZURE_CLIENT_ID", "")
 
 # API Key authentication (optional)
 API_KEY = os.getenv("API_KEY", "")
