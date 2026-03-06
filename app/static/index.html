@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Azure Video Podcaster</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0f172a;
+            color: #e2e8f0;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 2rem 1rem;
+        }
+        header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+        header h1 {
+            font-size: 1.8rem;
+            color: #38bdf8;
+            margin-bottom: 0.25rem;
+        }
+        header p { color: #94a3b8; font-size: 0.95rem; }
+
+        .card {
+            background: #1e293b;
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            border: 1px solid #334155;
+        }
+        .card h2 {
+            font-size: 1.1rem;
+            color: #38bdf8;
+            margin-bottom: 1rem;
+        }
+
+        label {
+            display: block;
+            font-size: 0.85rem;
+            color: #94a3b8;
+            margin-bottom: 0.3rem;
+            margin-top: 0.8rem;
+        }
+        label:first-child { margin-top: 0; }
+
+        textarea {
+            width: 100%;
+            min-height: 180px;
+            background: #0f172a;
+            color: #e2e8f0;
+            border: 1px solid #475569;
+            border-radius: 8px;
+            padding: 0.75rem;
+            font-size: 0.9rem;
+            resize: vertical;
+            font-family: inherit;
+        }
+        textarea:focus { outline: none; border-color: #38bdf8; }
+
+        .row {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 0.75rem;
+        }
+        @media (max-width: 600px) {
+            .row { grid-template-columns: 1fr; }
+        }
+
+        select, input[type="text"] {
+            width: 100%;
+            background: #0f172a;
+            color: #e2e8f0;
+            border: 1px solid #475569;
+            border-radius: 8px;
+            padding: 0.5rem 0.75rem;
+            font-size: 0.9rem;
+        }
+        select:focus, input:focus { outline: none; border-color: #38bdf8; }
+
+        .stats {
+            display: flex;
+            gap: 1.5rem;
+            margin-top: 0.75rem;
+            font-size: 0.85rem;
+            color: #94a3b8;
+        }
+        .stats span { color: #38bdf8; font-weight: 600; }
+
+        .btn {
+            display: inline-block;
+            background: #2563eb;
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            padding: 0.7rem 2rem;
+            font-size: 1rem;
+            cursor: pointer;
+            margin-top: 1rem;
+            width: 100%;
+            font-weight: 600;
+        }
+        .btn:hover { background: #1d4ed8; }
+        .btn:disabled {
+            background: #475569;
+            cursor: not-allowed;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+        .tab {
+            padding: 0.4rem 1rem;
+            background: transparent;
+            color: #94a3b8;
+            border: 1px solid #334155;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.85rem;
+        }
+        .tab.active {
+            background: #2563eb;
+            color: #fff;
+            border-color: #2563eb;
+        }
+
+        #topicSection { display: none; }
+
+        /* Progress */
+        .progress-area {
+            display: none;
+            text-align: center;
+            padding: 2rem 0;
+        }
+        .progress-bar-container {
+            width: 100%;
+            background: #0f172a;
+            border-radius: 8px;
+            height: 8px;
+            margin: 1rem 0;
+            overflow: hidden;
+        }
+        .progress-bar {
+            height: 100%;
+            background: #38bdf8;
+            border-radius: 8px;
+            width: 0%;
+            transition: width 0.5s;
+        }
+        .progress-status {
+            font-size: 0.95rem;
+            color: #94a3b8;
+        }
+
+        /* Video player */
+        .video-area {
+            display: none;
+            text-align: center;
+        }
+        .video-area video {
+            width: 100%;
+            max-height: 500px;
+            border-radius: 8px;
+            background: #000;
+            margin-bottom: 1rem;
+        }
+        .video-area a {
+            color: #38bdf8;
+            text-decoration: none;
+        }
+
+        .error-msg {
+            display: none;
+            background: #7f1d1d;
+            color: #fca5a5;
+            padding: 0.75rem 1rem;
+            border-radius: 8px;
+            margin-top: 1rem;
+            font-size: 0.9rem;
+        }
+
+        .api-key-input {
+            margin-bottom: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Azure Video Podcaster</h1>
+            <p>Generate avatar video podcasts from text</p>
+        </header>
+
+        <div class="card api-key-input" id="apiKeyCard" style="display:none;">
+            <label for="apiKey">API Key (required)</label>
+            <input type="text" id="apiKey" placeholder="Enter your API key">
+        </div>
+
+        <div class="card">
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab('text')">Script</button>
+                <button class="tab" onclick="switchTab('topic')">From Topic</button>
+            </div>
+
+            <div id="textSection">
+                <label for="scriptText">Podcast Script</label>
+                <textarea id="scriptText" placeholder="Write or paste your podcast script here...&#10;&#10;For a 5-minute podcast, write approximately 650 words."></textarea>
+                <div class="stats">
+                    <div>Words: <span id="wordCount">0</span></div>
+                    <div>Est. duration: <span id="estDuration">0:00</span></div>
+                </div>
+            </div>
+
+            <div id="topicSection">
+                <label for="topicText">Topic / Bullet Points</label>
+                <textarea id="topicText" placeholder="Describe your podcast topic or provide bullet points...&#10;&#10;Azure OpenAI will generate a ~650-word script automatically."></textarea>
+                <p style="font-size: 0.8rem; color: #64748b; margin-top: 0.5rem;">
+                    Requires Azure OpenAI configuration on the server.
+                </p>
+            </div>
+
+            <label for="titleInput">Episode Title (optional)</label>
+            <input type="text" id="titleInput" placeholder="e.g. Weekly Briefing - Episode 7">
+
+            <div class="row">
+                <div>
+                    <label for="avatarSelect">Avatar</label>
+                    <select id="avatarSelect"></select>
+                </div>
+                <div>
+                    <label for="styleSelect">Style</label>
+                    <select id="styleSelect"></select>
+                </div>
+                <div>
+                    <label for="voiceSelect">Voice</label>
+                    <select id="voiceSelect"></select>
+                </div>
+            </div>
+
+            <button class="btn" id="generateBtn" onclick="generatePodcast()">Generate Podcast</button>
+            <div class="error-msg" id="errorMsg"></div>
+        </div>
+
+        <div class="card progress-area" id="progressArea">
+            <h2>Generating...</h2>
+            <p class="progress-status" id="progressStatus">Submitting job...</p>
+            <div class="progress-bar-container">
+                <div class="progress-bar" id="progressBar"></div>
+            </div>
+            <p style="font-size: 0.8rem; color: #64748b; margin-top: 0.5rem;">
+                Video generation typically takes 2-5 minutes.
+            </p>
+        </div>
+
+        <div class="card video-area" id="videoArea">
+            <h2>Podcast Ready</h2>
+            <video id="videoPlayer" controls></video>
+            <a id="downloadLink" href="#" target="_blank">Download Video</a>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = window.location.origin;
+        let avatarData = {};
+        let currentMode = 'text';
+        let pollingInterval = null;
+
+        function getHeaders() {
+            const headers = { 'Content-Type': 'application/json' };
+            const key = document.getElementById('apiKey')?.value;
+            if (key) headers['X-API-Key'] = key;
+            return headers;
+        }
+
+        async function init() {
+            try {
+                // Check health to see if API key is needed
+                const health = await fetch(API_BASE + '/health').then(r => r.json());
+
+                const res = await fetch(API_BASE + '/avatars', { headers: getHeaders() });
+                if (res.status === 401) {
+                    document.getElementById('apiKeyCard').style.display = 'block';
+                    return;
+                }
+                const data = await res.json();
+                avatarData = data.avatars;
+                const defaults = data.defaults || {};
+
+                // Populate avatar select
+                const avatarSel = document.getElementById('avatarSelect');
+                for (const name of Object.keys(avatarData)) {
+                    const opt = document.createElement('option');
+                    opt.value = name;
+                    opt.textContent = name;
+                    if (name === defaults.avatar_character) opt.selected = true;
+                    avatarSel.appendChild(opt);
+                }
+                updateStyles();
+
+                // Populate voice select
+                const voiceSel = document.getElementById('voiceSelect');
+                for (const v of data.voices.italian) {
+                    const opt = document.createElement('option');
+                    opt.value = v;
+                    opt.textContent = v.replace('it-IT-', '').replace('Neural', '');
+                    if (v === defaults.voice) opt.selected = true;
+                    voiceSel.appendChild(opt);
+                }
+
+                avatarSel.addEventListener('change', updateStyles);
+
+                // Set default style
+                setTimeout(() => {
+                    const styleSel = document.getElementById('styleSelect');
+                    for (const opt of styleSel.options) {
+                        if (opt.value === defaults.avatar_style) {
+                            opt.selected = true;
+                            break;
+                        }
+                    }
+                }, 50);
+            } catch (e) {
+                console.error('Init error:', e);
+            }
+        }
+
+        function updateStyles() {
+            const avatar = document.getElementById('avatarSelect').value;
+            const styleSel = document.getElementById('styleSelect');
+            styleSel.innerHTML = '';
+            for (const s of (avatarData[avatar] || [])) {
+                const opt = document.createElement('option');
+                opt.value = s;
+                opt.textContent = s;
+                styleSel.appendChild(opt);
+            }
+        }
+
+        function switchTab(mode) {
+            currentMode = mode;
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            event.target.classList.add('active');
+            document.getElementById('textSection').style.display = mode === 'text' ? 'block' : 'none';
+            document.getElementById('topicSection').style.display = mode === 'topic' ? 'block' : 'none';
+        }
+
+        // Word count
+        document.addEventListener('DOMContentLoaded', () => {
+            const ta = document.getElementById('scriptText');
+            ta.addEventListener('input', () => {
+                const words = ta.value.trim().split(/\s+/).filter(Boolean).length;
+                document.getElementById('wordCount').textContent = words;
+                const mins = Math.floor(words / 130);
+                const secs = Math.round((words % 130) / 130 * 60);
+                document.getElementById('estDuration').textContent =
+                    mins + ':' + String(secs).padStart(2, '0');
+            });
+            init();
+        });
+
+        function showError(msg) {
+            const el = document.getElementById('errorMsg');
+            el.textContent = msg;
+            el.style.display = 'block';
+            setTimeout(() => el.style.display = 'none', 8000);
+        }
+
+        async function generatePodcast() {
+            const btn = document.getElementById('generateBtn');
+            btn.disabled = true;
+
+            document.getElementById('errorMsg').style.display = 'none';
+            document.getElementById('videoArea').style.display = 'none';
+
+            try {
+                let endpoint, body;
+
+                if (currentMode === 'topic') {
+                    const topic = document.getElementById('topicText').value.trim();
+                    if (!topic) { showError('Please enter a topic.'); btn.disabled = false; return; }
+                    endpoint = '/podcast/generate-from-topic';
+                    body = { topic };
+                } else {
+                    const text = document.getElementById('scriptText').value.trim();
+                    if (!text) { showError('Please enter a script.'); btn.disabled = false; return; }
+                    endpoint = '/podcast/generate';
+                    body = { text };
+                }
+
+                body.title = document.getElementById('titleInput').value || undefined;
+                body.avatar_character = document.getElementById('avatarSelect').value;
+                body.avatar_style = document.getElementById('styleSelect').value;
+                body.voice = document.getElementById('voiceSelect').value;
+
+                const res = await fetch(API_BASE + endpoint, {
+                    method: 'POST',
+                    headers: getHeaders(),
+                    body: JSON.stringify(body),
+                });
+
+                if (!res.ok) {
+                    const err = await res.json();
+                    showError(err.detail || 'Request failed');
+                    btn.disabled = false;
+                    return;
+                }
+
+                const data = await res.json();
+                startPolling(data.job_id);
+            } catch (e) {
+                showError('Network error: ' + e.message);
+                btn.disabled = false;
+            }
+        }
+
+        function startPolling(jobId) {
+            const area = document.getElementById('progressArea');
+            const bar = document.getElementById('progressBar');
+            const status = document.getElementById('progressStatus');
+            area.style.display = 'block';
+            bar.style.width = '10%';
+            status.textContent = 'Job submitted, waiting for processing...';
+
+            let polls = 0;
+            pollingInterval = setInterval(async () => {
+                polls++;
+                try {
+                    const res = await fetch(API_BASE + '/podcast/' + jobId, {
+                        headers: getHeaders(),
+                    });
+                    const data = await res.json();
+
+                    if (data.status === 'Succeeded') {
+                        clearInterval(pollingInterval);
+                        bar.style.width = '100%';
+                        status.textContent = 'Complete!';
+
+                        setTimeout(() => {
+                            area.style.display = 'none';
+                            showVideo(data.download_url || data.video_url, jobId);
+                        }, 500);
+                        return;
+                    }
+
+                    if (data.status === 'Failed') {
+                        clearInterval(pollingInterval);
+                        area.style.display = 'none';
+                        showError('Generation failed: ' + (data.error || 'Unknown error'));
+                        document.getElementById('generateBtn').disabled = false;
+                        return;
+                    }
+
+                    // Animate progress
+                    const pct = Math.min(10 + polls * 3, 90);
+                    bar.style.width = pct + '%';
+                    status.textContent = `Status: ${data.status} (checking every 10s...)`;
+                } catch (e) {
+                    // Keep polling on transient errors
+                }
+            }, 10000);
+        }
+
+        function showVideo(url, jobId) {
+            const area = document.getElementById('videoArea');
+            const player = document.getElementById('videoPlayer');
+            const link = document.getElementById('downloadLink');
+
+            player.src = url;
+            link.href = url;
+            area.style.display = 'block';
+            document.getElementById('generateBtn').disabled = false;
+        }
+    </script>
+</body>
+</html>
