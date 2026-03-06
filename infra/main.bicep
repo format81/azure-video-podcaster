@@ -26,14 +26,15 @@ param deployOpenAI bool = false
 // --- Variables ---
 
 var uniqueSuffix = uniqueString(resourceGroup().id)
-var speechName = '${baseName}-speech-${uniqueSuffix}'
-var storageName = replace('${baseName}st${uniqueSuffix}', '-', '')
-var acrName = replace('${baseName}acr${uniqueSuffix}', '-', '')
-var logAnalyticsName = '${baseName}-logs-${uniqueSuffix}'
-var containerEnvName = '${baseName}-env-${uniqueSuffix}'
+var shortSuffix = substring(uniqueSuffix, 0, 8)
+var speechName = '${baseName}-speech-${shortSuffix}'
+var storageName = toLower(take(replace('${baseName}st${shortSuffix}', '-', ''), 24))
+var acrName = toLower(take(replace('${baseName}acr${shortSuffix}', '-', ''), 50))
+var logAnalyticsName = '${baseName}-logs-${shortSuffix}'
+var containerEnvName = '${baseName}-env-${shortSuffix}'
 var containerAppName = '${baseName}-app'
-var openaiName = '${baseName}-openai-${uniqueSuffix}'
-var managedIdentityName = '${baseName}-id-${uniqueSuffix}'
+var openaiName = '${baseName}-openai-${shortSuffix}'
+var managedIdentityName = '${baseName}-id-${shortSuffix}'
 
 // --- Managed Identity ---
 
@@ -265,7 +266,7 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
             }
             {
               name: 'AZURE_OPENAI_ENDPOINT'
-              value: deployOpenAI ? openaiService.properties.endpoint : ''
+              value: deployOpenAI ? openaiService!.properties.endpoint : ''
             }
             {
               name: 'AZURE_OPENAI_DEPLOYMENT'
@@ -301,4 +302,4 @@ output acrLoginServer string = acr.properties.loginServer
 output containerAppUrl string = 'https://${containerApp.properties.configuration.ingress.fqdn}'
 output containerAppName string = containerApp.name
 output managedIdentityId string = managedIdentity.id
-output openaiServiceName string = deployOpenAI ? openaiService.name : 'not-deployed'
+output openaiServiceName string = deployOpenAI ? openaiService!.name : 'not-deployed'
