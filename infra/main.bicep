@@ -121,6 +121,18 @@ resource openaiService 'Microsoft.CognitiveServices/accounts@2024-10-01' = if (d
   }
 }
 
+// Cognitive Services OpenAI User role for managed identity on OpenAI Service
+// This role (5e0bd9bd-7b93-4f28-af87-19fc36ad61bd) allows chat/completions calls via Entra ID token
+resource openaiRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (deployOpenAI) {
+  name: guid(openaiService.id, managedIdentity.id, 'cognitive-services-openai-user')
+  scope: openaiService
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '5e0bd9bd-7b93-4f28-af87-19fc36ad61bd')
+    principalId: managedIdentity.properties.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
 // --- Container Registry ---
 
 resource acr 'Microsoft.ContainerRegistry/registries@2023-07-01' = {
@@ -246,6 +258,18 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
             {
               name: 'TTS_LANGUAGE'
               value: 'it-IT'
+            }
+            {
+              name: 'AZURE_CLIENT_ID'
+              value: managedIdentity.properties.clientId
+            }
+            {
+              name: 'AZURE_OPENAI_ENDPOINT'
+              value: deployOpenAI ? openaiService.properties.endpoint : ''
+            }
+            {
+              name: 'AZURE_OPENAI_DEPLOYMENT'
+              value: 'gpt-4o'
             }
           ]
         }
