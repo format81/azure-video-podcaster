@@ -77,16 +77,23 @@ def test_generate_podcast_invalid_avatar_style(client):
     assert "not available" in response.json()["detail"]
 
 
+@patch("app.routes.podcast.MANAGED_IDENTITY_CLIENT_ID", "")
 @patch("app.routes.podcast.SPEECH_KEY", "")
 def test_generate_podcast_no_key(client):
     response = client.post("/podcast/generate", json={
         "text": "Benvenuti al nostro podcast. " * 30,
     })
     assert response.status_code == 500
-    assert "AZURE_SPEECH_KEY" in response.json()["detail"]
+    assert "Speech auth not configured" in response.json()["detail"]
 
 
-def test_get_podcast_status_not_found(client):
+@patch("app.services.speech.get_auth_headers", return_value={"Content-Type": "application/json", "Ocp-Apim-Subscription-Key": "fake-key"})
+@patch("app.services.speech.requests.get")
+def test_get_podcast_status_not_found(mock_get, _mock_auth, client):
+    mock_response = MagicMock()
+    mock_response.status_code = 404
+    mock_response.text = "Not found"
+    mock_get.return_value = mock_response
     response = client.get("/podcast/nonexistent-id")
     assert response.status_code == 404
 

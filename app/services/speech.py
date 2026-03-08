@@ -14,6 +14,7 @@ from app.config import (
     DEFAULT_AVATAR_STYLE,
     DEFAULT_LANGUAGE,
     DEFAULT_VOICE,
+    MANAGED_IDENTITY_CLIENT_ID,
     SPEECH_ENDPOINT,
     SPEECH_KEY,
 )
@@ -21,13 +22,35 @@ from app.models import PodcastRequest
 
 logger = logging.getLogger("video-podcaster")
 
+_COGNITIVE_SCOPE = "https://cognitiveservices.azure.com/.default"
+
+
+def _get_entra_token() -> str:
+    """Get an Entra ID token for Cognitive Services (Speech)."""
+    from azure.identity import DefaultAzureCredential, ManagedIdentityCredential
+
+    if MANAGED_IDENTITY_CLIENT_ID:
+        credential = ManagedIdentityCredential(client_id=MANAGED_IDENTITY_CLIENT_ID)
+    else:
+        credential = DefaultAzureCredential()
+
+    return credential.get_token(_COGNITIVE_SCOPE).token
+
 
 def get_auth_headers() -> dict[str, str]:
-    """Get authentication headers for Azure Speech API."""
-    return {
-        "Ocp-Apim-Subscription-Key": SPEECH_KEY,
-        "Content-Type": "application/json",
-    }
+    """Get authentication headers for Azure Speech API.
+
+    Prefers API key if set, otherwise uses Entra ID (Managed Identity).
+    """
+    headers: dict[str, str] = {"Content-Type": "application/json"}
+
+    if SPEECH_KEY:
+        headers["Ocp-Apim-Subscription-Key"] = SPEECH_KEY
+    else:
+        token = _get_entra_token()
+        headers["Authorization"] = f"Bearer {token}"
+
+    return headers
 
 
 def estimate_speech_duration_seconds(text: str, words_per_minute: int = 130) -> int:

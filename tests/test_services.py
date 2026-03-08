@@ -44,8 +44,9 @@ def test_generate_job_id():
     assert len(job_id) == 20  # "podcast-" + 12 hex chars
 
 
+@patch("app.services.speech.get_auth_headers", return_value={"Content-Type": "application/json", "Ocp-Apim-Subscription-Key": "fake-key"})
 @patch("app.services.speech.requests.put")
-def test_submit_avatar_synthesis(mock_put):
+def test_submit_avatar_synthesis(mock_put, _mock_auth):
     from app.models import PodcastRequest
     from app.services.speech import submit_avatar_synthesis
 
@@ -61,8 +62,9 @@ def test_submit_avatar_synthesis(mock_put):
     mock_put.assert_called_once()
 
 
+@patch("app.services.speech.get_auth_headers", return_value={"Content-Type": "application/json", "Ocp-Apim-Subscription-Key": "fake-key"})
 @patch("app.services.speech.requests.put")
-def test_submit_avatar_synthesis_error(mock_put):
+def test_submit_avatar_synthesis_error(mock_put, _mock_auth):
     from fastapi import HTTPException
     from app.models import PodcastRequest
     from app.services.speech import submit_avatar_synthesis
@@ -78,8 +80,9 @@ def test_submit_avatar_synthesis_error(mock_put):
     assert exc_info.value.status_code == 400
 
 
+@patch("app.services.speech.get_auth_headers", return_value={"Content-Type": "application/json", "Ocp-Apim-Subscription-Key": "fake-key"})
 @patch("app.services.speech.requests.get")
-def test_get_synthesis_status(mock_get):
+def test_get_synthesis_status(mock_get, _mock_auth):
     from app.services.speech import get_synthesis_status
 
     mock_response = MagicMock()
@@ -91,8 +94,9 @@ def test_get_synthesis_status(mock_get):
     assert result["status"] == "Running"
 
 
+@patch("app.services.speech.get_auth_headers", return_value={"Content-Type": "application/json", "Ocp-Apim-Subscription-Key": "fake-key"})
 @patch("app.services.speech.requests.delete")
-def test_delete_synthesis_job(mock_delete):
+def test_delete_synthesis_job(mock_delete, _mock_auth):
     from app.services.speech import delete_synthesis_job
 
     mock_response = MagicMock()
