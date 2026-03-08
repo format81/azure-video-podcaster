@@ -54,7 +54,6 @@ resource speechService 'Microsoft.CognitiveServices/accounts@2024-10-01' = {
   }
   properties: {
     publicNetworkAccess: 'Enabled'
-    disableLocalAuth: false
   }
 }
 
@@ -81,7 +80,6 @@ resource storageAccount 'Microsoft.Storage/storageAccounts@2023-05-01' = {
   properties: {
     accessTier: 'Hot'
     allowBlobPublicAccess: false
-    allowSharedKeyAccess: true
     minimumTlsVersion: 'TLS1_2'
   }
 }
@@ -145,7 +143,18 @@ resource acr 'Microsoft.ContainerRegistry/registries@2023-07-01' = {
     name: 'Basic'
   }
   properties: {
-    adminUserEnabled: true
+    adminUserEnabled: false
+  }
+}
+
+// AcrPull role for managed identity on Container Registry
+resource acrPullRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(acr.id, managedIdentity.id, 'acr-pull')
+  scope: acr
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '7f951dda-4ed3-4680-a7ca-43fe172d538d')
+    principalId: managedIdentity.properties.principalId
+    principalType: 'ServicePrincipal'
   }
 }
 
@@ -159,9 +168,6 @@ resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
       name: 'PerGB2018'
     }
     retentionInDays: 30
-    features: {
-      disableLocalAuth: false
-    }
   }
 }
 
@@ -172,16 +178,27 @@ resource containerEnv 'Microsoft.App/managedEnvironments@2024-03-01' = {
   location: location
   properties: {
     appLogsConfiguration: {
-      destination: 'log-analytics'
-      logAnalyticsConfiguration: {
-        customerId: logAnalytics.properties.customerId
-        sharedKey: logAnalytics.listKeys().primarySharedKey
-      }
+      destination: 'azure-monitor'
     }
     workloadProfiles: [
       {
         name: 'Consumption'
         workloadProfileType: 'Consumption'
+      }
+    ]
+  }
+}
+
+// Diagnostic settings to send Container Apps Environment logs to Log Analytics
+resource containerEnvDiagnostics 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = {
+  name: 'send-to-log-analytics'
+  scope: containerEnv
+  properties: {
+    workspaceId: logAnalytics.id
+    logs: [
+      {
+        categoryGroup: 'allLogs'
+        enabled: true
       }
     ]
   }
@@ -210,22 +227,7 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
       registries: [
         {
           server: acr.properties.loginServer
-          username: acr.listCredentials().username
-          passwordSecretRef: 'acr-password'
-        }
-      ]
-      secrets: [
-        {
-          name: 'acr-password'
-          value: acr.listCredentials().passwords[0].value
-        }
-        {
-          name: 'speech-key'
-          value: speechService.listKeys().key1
-        }
-        {
-          name: 'storage-connection'
-          value: 'DefaultEndpointsProtocol=https;AccountName=${storageAccount.name};AccountKey=${storageAccount.listKeys().keys[0].value};EndpointSuffix=core.windows.net'
+          identity: managedIdentity.id
         }
       ]
     }
@@ -240,16 +242,12 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
           }
           env: [
             {
-              name: 'AZURE_SPEECH_KEY'
-              secretRef: 'speech-key'
-            }
-            {
               name: 'AZURE_SPEECH_REGION'
               value: location
             }
             {
-              name: 'AZURE_STORAGE_CONNECTION_STRING'
-              secretRef: 'storage-connection'
+              name: 'AZURE_STORAGE_ACCOUNT_NAME'
+              value: storageAccount.name
             }
             {
               name: 'AZURE_STORAGE_CONTAINER'

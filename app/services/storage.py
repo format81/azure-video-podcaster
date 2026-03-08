@@ -8,7 +8,13 @@ from typing import TYPE_CHECKING
 
 import requests as http_requests
 
-from app.config import SAS_EXPIRY_HOURS, STORAGE_CONNECTION_STRING, STORAGE_CONTAINER
+from app.config import (
+    MANAGED_IDENTITY_CLIENT_ID,
+    SAS_EXPIRY_HOURS,
+    STORAGE_ACCOUNT_NAME,
+    STORAGE_CONNECTION_STRING,
+    STORAGE_CONTAINER,
+)
 
 if TYPE_CHECKING:
     from azure.storage.blob import BlobServiceClient
@@ -17,14 +23,29 @@ logger = logging.getLogger("video-podcaster")
 
 
 def is_storage_configured() -> bool:
-    """Check if Azure Blob Storage is configured."""
-    return bool(STORAGE_CONNECTION_STRING)
+    """Check if Azure Blob Storage is configured (connection string or account name)."""
+    return bool(STORAGE_CONNECTION_STRING or STORAGE_ACCOUNT_NAME)
 
 
 def get_blob_service_client() -> BlobServiceClient:
-    """Create a BlobServiceClient from connection string."""
+    """Create a BlobServiceClient.
+
+    Uses connection string if available, otherwise Managed Identity.
+    """
     from azure.storage.blob import BlobServiceClient
-    return BlobServiceClient.from_connection_string(STORAGE_CONNECTION_STRING)
+
+    if STORAGE_CONNECTION_STRING:
+        return BlobServiceClient.from_connection_string(STORAGE_CONNECTION_STRING)
+
+    from azure.identity import DefaultAzureCredential, ManagedIdentityCredential
+
+    if MANAGED_IDENTITY_CLIENT_ID:
+        credential = ManagedIdentityCredential(client_id=MANAGED_IDENTITY_CLIENT_ID)
+    else:
+        credential = DefaultAzureCredential()
+
+    account_url = f"https://{STORAGE_ACCOUNT_NAME}.blob.core.windows.net"
+    return BlobServiceClient(account_url, credential=credential)
 
 
 def upload_video_from_url(job_id: str, video_url: str) -> str:
@@ -57,24 +78,46 @@ def upload_video_from_url(job_id: str, video_url: str) -> str:
 
 
 def generate_sas_url(blob_name: str) -> str:
-    """Generate a SAS URL for downloading a video blob."""
-    from azure.storage.blob import generate_blob_sas, BlobSasPermissions
+    """Generate a SAS URL for downloading a video blob.
 
+    Uses account key (from connection string) if available,
+    otherwise uses user delegation key via Managed Identity.
+    """
     client = get_blob_service_client()
     account_name = client.account_name
 
-    # Extract account key from connection string
-    parts = dict(part.split("=", 1) for part in STORAGE_CONNECTION_STRING.split(";") if "=" in part)
-    account_key = parts.get("AccountKey", "")
+    if STORAGE_CONNECTION_STRING:
+        from azure.storage.blob import BlobSasPermissions, generate_blob_sas
 
-    sas_token = generate_blob_sas(
-        account_name=account_name,
-        container_name=STORAGE_CONTAINER,
-        blob_name=blob_name,
-        account_key=account_key,
-        permission=BlobSasPermissions(read=True),
-        expiry=datetime.now(timezone.utc) + timedelta(hours=SAS_EXPIRY_HOURS),
-    )
+        # Extract account key from connection string
+        parts = dict(part.split("=", 1) for part in STORAGE_CONNECTION_STRING.split(";") if "=" in part)
+        account_key = parts.get("AccountKey", "")
+
+        sas_token = generate_blob_sas(
+            account_name=account_name,
+            container_name=STORAGE_CONTAINER,
+            blob_name=blob_name,
+            account_key=account_key,
+            permission=BlobSasPermissions(read=True),
+            expiry=datetime.now(timezone.utc) + timedelta(hours=SAS_EXPIRY_HOURS),
+        )
+    else:
+        from azure.storage.blob import BlobSasPermissions, generate_blob_sas
+
+        # Use user delegation key (Managed Identity)
+        start_time = datetime.now(timezone.utc)
+        expiry_time = start_time + timedelta(hours=SAS_EXPIRY_HOURS)
+        delegation_key = client.get_user_delegation_key(start_time, expiry_time)
+
+        sas_token = generate_blob_sas(
+            account_name=account_name,
+            container_name=STORAGE_CONTAINER,
+            blob_name=blob_name,
+            user_delegation_key=delegation_key,
+            permission=BlobSasPermissions(read=True),
+            expiry=expiry_time,
+            start=start_time,
+        )
 
     return f"https://{account_name}.blob.core.windows.net/{STORAGE_CONTAINER}/{blob_name}?{sas_token}"
 

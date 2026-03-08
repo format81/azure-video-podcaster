@@ -9,6 +9,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from app.config import (
     DEFAULT_AVATAR_CHARACTER,
     DEFAULT_AVATAR_STYLE,
+    MANAGED_IDENTITY_CLIENT_ID,
     MAX_TEXT_LENGTH,
     MAX_VIDEO_DURATION_SECONDS,
     MIN_TEXT_LENGTH,
@@ -82,8 +83,8 @@ async def generate_podcast(
     if req:
         check_rate_limit(req)
 
-    if not SPEECH_KEY:
-        raise HTTPException(status_code=500, detail="AZURE_SPEECH_KEY not configured")
+    if not SPEECH_KEY and not MANAGED_IDENTITY_CLIENT_ID:
+        raise HTTPException(status_code=500, detail="Speech auth not configured. Set AZURE_SPEECH_KEY or AZURE_CLIENT_ID for Managed Identity.")
 
     _validate_text(request.text)
 
@@ -154,8 +155,8 @@ async def generate_from_topic(
             detail="Azure OpenAI is not configured. Set AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_KEY, and AZURE_OPENAI_DEPLOYMENT.",
         )
 
-    if not SPEECH_KEY:
-        raise HTTPException(status_code=500, detail="AZURE_SPEECH_KEY not configured")
+    if not SPEECH_KEY and not MANAGED_IDENTITY_CLIENT_ID:
+        raise HTTPException(status_code=500, detail="Speech auth not configured. Set AZURE_SPEECH_KEY or AZURE_CLIENT_ID for Managed Identity.")
 
     language = request.language or "it-IT"
     script = generate_script(request.topic, language)

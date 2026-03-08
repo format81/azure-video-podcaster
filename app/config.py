@@ -3,13 +3,14 @@
 import os
 
 # Azure Speech Service
-SPEECH_KEY = os.getenv("AZURE_SPEECH_KEY", "")
+SPEECH_KEY = os.getenv("AZURE_SPEECH_KEY", "")  # Optional: leave empty to use Managed Identity
 SPEECH_REGION = os.getenv("AZURE_SPEECH_REGION", "westeurope")
 SPEECH_ENDPOINT = f"https://{SPEECH_REGION}.api.cognitive.microsoft.com"
 API_VERSION = "2024-08-01"
 
 # Azure Storage
-STORAGE_CONNECTION_STRING = os.getenv("AZURE_STORAGE_CONNECTION_STRING", "")
+STORAGE_CONNECTION_STRING = os.getenv("AZURE_STORAGE_CONNECTION_STRING", "")  # Optional: leave empty to use Managed Identity
+STORAGE_ACCOUNT_NAME = os.getenv("AZURE_STORAGE_ACCOUNT_NAME", "")
 STORAGE_CONTAINER = os.getenv("AZURE_STORAGE_CONTAINER", "podcast-videos")
 
 # Azure OpenAI (optional - auth via Managed Identity, API key is optional fallback)
