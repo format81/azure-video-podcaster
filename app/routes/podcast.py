@@ -17,8 +17,8 @@ from app.config import (
     STANDARD_AVATARS,
 )
 from app.middleware import check_rate_limit, verify_api_key
-from app.models import PodcastListResponse, PodcastRequest, PodcastStatus, TopicRequest
-from app.services.openai import generate_script, is_openai_configured
+from app.models import ContentRequest, PodcastListResponse, PodcastRequest, PodcastStatus, TopicRequest
+from app.services.openai import generate_script, generate_script_from_content, is_openai_configured
 from app.services.speech import (
     delete_synthesis_job,
     estimate_speech_duration_seconds,
@@ -164,6 +164,59 @@ async def generate_from_topic(
     podcast_request = PodcastRequest(
         text=script,
         title=request.title or f"Podcast: {request.topic[:50]}",
+        voice=request.voice,
+        language=language,
+        avatar_character=request.avatar_character,
+        avatar_style=request.avatar_style,
+        background_color=request.background_color,
+        subtitle=request.subtitle,
+        video_format=request.video_format,
+        video_codec=request.video_codec,
+    )
+
+    return await generate_podcast(podcast_request, background_tasks, req)
+
+
+@router.post("/generate-from-content", response_model=PodcastStatus)
+async def generate_from_content(
+    request: ContentRequest,
+    background_tasks: BackgroundTasks,
+    req: Request = None,
+    _key: str | None = Depends(verify_api_key),
+):
+    """Generate a podcast from source content and a custom production prompt.
+
+    Pass two inputs:
+    - source_text: the raw content (article, report, news, etc.)
+    - system_prompt: the full production prompt defining persona, structure, voice style, studio, format
+
+    Azure OpenAI will use the system_prompt to transform the source_text into a spoken script,
+    then the script is synthesized into a video podcast with the specified avatar/voice settings.
+    """
+    if req:
+        check_rate_limit(req)
+
+    if not is_openai_configured():
+        raise HTTPException(
+            status_code=503,
+            detail="Azure OpenAI is not configured. Set AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_DEPLOYMENT.",
+        )
+
+    if not SPEECH_KEY and not MANAGED_IDENTITY_CLIENT_ID:
+        raise HTTPException(status_code=500, detail="Speech auth not configured. Set AZURE_SPEECH_KEY or AZURE_CLIENT_ID for Managed Identity.")
+
+    if len(request.source_text.strip()) < MIN_TEXT_LENGTH:
+        raise HTTPException(status_code=400, detail=f"source_text too short. Minimum {MIN_TEXT_LENGTH} characters.")
+
+    if len(request.system_prompt.strip()) < 50:
+        raise HTTPException(status_code=400, detail="system_prompt too short. Provide a detailed production prompt (at least 50 characters).")
+
+    language = request.language or "it-IT"
+    script = generate_script_from_content(request.source_text, request.system_prompt, language)
+
+    podcast_request = PodcastRequest(
+        text=script,
+        title=request.title or "Podcast from content",
         voice=request.voice,
         language=language,
         avatar_character=request.avatar_character,

@@ -52,3 +52,18 @@ class TopicRequest(BaseModel):
     subtitle: Optional[bool] = Field(True, description="Enable embedded subtitles")
     video_format: Optional[str] = Field("mp4", description="Video format")
     video_codec: Optional[str] = Field("h264", description="Video codec")
+
+
+class ContentRequest(BaseModel):
+    """Request to generate a podcast from source content and a production prompt."""
+    source_text: str = Field(..., description="The source content (article, report, news) to base the podcast on")
+    system_prompt: str = Field(..., description="Production prompt defining persona, voice style, structure, studio, format")
+    title: Optional[str] = Field(None, description="Podcast episode title")
+    voice: Optional[str] = Field(None, description="Azure TTS voice name")
+    language: Optional[str] = Field(None, description="Language code (e.g., it-IT, en-US)")
+    avatar_character: Optional[str] = Field(None, description="Avatar character")
+    avatar_style: Optional[str] = Field(None, description="Avatar style")
+    background_color: Optional[str] = Field("#FFFFFFFF", description="Background color")
+    subtitle: Optional[bool] = Field(True, description="Enable embedded subtitles")
+    video_format: Optional[str] = Field("mp4", description="Video format")
+    video_codec: Optional[str] = Field("h264", description="Video codec")
