@@ -101,8 +101,9 @@ def generate_script(topic: str, language: str = "it-IT") -> str:
     lang_name = "Italian" if language.startswith("it") else "English"
     user_prompt = f"Write a podcast script in {lang_name} about the following topic:\n\n{topic}"
 
+    endpoint = AZURE_OPENAI_ENDPOINT.rstrip("/")
     url = (
-        f"{AZURE_OPENAI_ENDPOINT}/openai/deployments/"
+        f"{endpoint}/openai/deployments/"
         f"{AZURE_OPENAI_DEPLOYMENT}/chat/completions?api-version=2024-10-21"
     )
 
