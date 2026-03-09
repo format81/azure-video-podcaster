@@ -5,7 +5,7 @@ import os
 # Azure Speech Service
 SPEECH_KEY = os.getenv("AZURE_SPEECH_KEY", "")  # Optional: leave empty to use Managed Identity
 SPEECH_REGION = os.getenv("AZURE_SPEECH_REGION", "westeurope")
-SPEECH_ENDPOINT = f"https://{SPEECH_REGION}.api.cognitive.microsoft.com"
+SPEECH_ENDPOINT = os.getenv("AZURE_SPEECH_ENDPOINT", f"https://{SPEECH_REGION}.api.cognitive.microsoft.com")
 API_VERSION = "2024-08-01"
 
 # Azure Storage
