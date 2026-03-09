@@ -28,7 +28,7 @@ param deployOpenAI bool = false
 
 var uniqueSuffix = uniqueString(resourceGroup().id)
 var shortSuffix = substring(uniqueSuffix, 0, 8)
-var speechName = '${baseName}-speech-${shortSuffix}'
+var speechName = '${baseName}-spch-${shortSuffix}'
 var storageName = toLower(take(replace('${baseName}st${shortSuffix}', '-', ''), 24))
 var acrName = toLower(take(replace('${baseName}acr${shortSuffix}', '-', ''), 50))
 var logAnalyticsName = '${baseName}-logs-${shortSuffix}'
