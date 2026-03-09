@@ -55,6 +55,7 @@ resource speechService 'Microsoft.CognitiveServices/accounts@2024-10-01' = {
     name: 'S0'
   }
   properties: {
+    customSubDomainName: speechName
     publicNetworkAccess: 'Enabled'
   }
 }
@@ -120,6 +121,7 @@ resource openaiService 'Microsoft.CognitiveServices/accounts@2024-10-01' = if (d
     name: 'S0'
   }
   properties: {
+    customSubDomainName: openaiName
     publicNetworkAccess: 'Enabled'
   }
 }
@@ -246,6 +248,10 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
             {
               name: 'AZURE_SPEECH_REGION'
               value: location
+            }
+            {
+              name: 'AZURE_SPEECH_ENDPOINT'
+              value: speechService.properties.endpoint
             }
             {
               name: 'AZURE_STORAGE_ACCOUNT_NAME'
