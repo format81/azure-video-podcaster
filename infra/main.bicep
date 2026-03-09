@@ -7,6 +7,7 @@
 targetScope = 'resourceGroup'
 
 @description('Base name for all resources')
+@minLength(3)
 param baseName string = 'videopodcaster'
 
 @description('Azure region - MUST be a region that supports TTS Avatar')
@@ -31,7 +32,7 @@ var speechName = '${baseName}-speech-${shortSuffix}'
 var storageName = toLower(take(replace('${baseName}st${shortSuffix}', '-', ''), 24))
 var acrName = toLower(take(replace('${baseName}acr${shortSuffix}', '-', ''), 50))
 var logAnalyticsName = '${baseName}-logs-${shortSuffix}'
-var containerEnvName = '${baseName}-env-${shortSuffix}'
+var containerEnvName = '${baseName}-cae-${shortSuffix}'
 var containerAppName = '${baseName}-app'
 var openaiName = '${baseName}-openai-${shortSuffix}'
 var managedIdentityName = '${baseName}-id-${shortSuffix}'
