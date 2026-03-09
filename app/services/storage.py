@@ -69,9 +69,13 @@ def upload_video_from_url(job_id: str, video_url: str) -> str:
     response = http_requests.get(video_url, stream=True)
     response.raise_for_status()
 
-    blob_client.upload_blob(response.content, overwrite=True, content_settings={
-        "content_type": "video/mp4",
-    })
+    from azure.storage.blob import ContentSettings
+
+    blob_client.upload_blob(
+        response.content,
+        overwrite=True,
+        content_settings=ContentSettings(content_type="video/mp4"),
+    )
     logger.info(f"Uploaded video to blob: {blob_name}")
 
     return blob_name
