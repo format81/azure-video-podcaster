@@ -15,6 +15,7 @@ param baseName string = 'videopodcaster'
   'westeurope'
   'westus2'
   'southeastasia'
+  'swedencentral'
 ])
 param location string = 'westeurope'
 
