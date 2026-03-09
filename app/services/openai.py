@@ -132,3 +132,71 @@ def generate_script(topic: str, language: str = "it-IT") -> str:
     script = data["choices"][0]["message"]["content"].strip()
     logger.info(f"Script generated: {len(script.split())} words")
     return script
+
+
+def generate_script_from_content(
+    source_text: str,
+    system_prompt: str,
+    language: str = "it-IT",
+) -> str:
+    """Generate a podcast script from source content using a custom production prompt.
+
+    The system_prompt defines the full production context (persona, structure, style, etc.)
+    and the source_text provides the raw content to transform into a podcast script.
+
+    Args:
+        source_text: The raw content (article, report, news) to base the podcast on.
+        system_prompt: The full production prompt (persona, format, structure, style).
+        language: Language code for the script.
+
+    Returns:
+        Generated script text.
+    """
+    if not is_openai_configured():
+        raise HTTPException(
+            status_code=503,
+            detail="Azure OpenAI is not configured. Set AZURE_OPENAI_ENDPOINT "
+                   "(and optionally AZURE_OPENAI_DEPLOYMENT). "
+                   "Auth via Managed Identity (no API key needed).",
+        )
+
+    lang_name = "Italian" if language.startswith("it") else "English"
+    user_prompt = (
+        f"Based on the following source content, produce the full spoken script "
+        f"for the video podcast episode in {lang_name}.\n"
+        f"Output ONLY the spoken script text — no stage directions, no section headers, "
+        f"no SSML tags.\n\n"
+        f"--- SOURCE CONTENT ---\n{source_text}\n--- END SOURCE CONTENT ---"
+    )
+
+    endpoint = AZURE_OPENAI_ENDPOINT.rstrip("/")
+    url = (
+        f"{endpoint}/openai/deployments/"
+        f"{AZURE_OPENAI_DEPLOYMENT}/chat/completions?api-version=2024-10-21"
+    )
+
+    payload = {
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        "temperature": 0.7,
+        "max_tokens": 4000,
+    }
+
+    headers = _get_auth_headers()
+
+    logger.info(f"Generating script from content ({len(source_text)} chars) with custom prompt...")
+    response = requests.post(url, json=payload, headers=headers, timeout=90)
+
+    if response.status_code >= 400:
+        logger.error(f"Azure OpenAI error: {response.status_code} - {response.text}")
+        raise HTTPException(
+            status_code=response.status_code,
+            detail=f"Azure OpenAI error: {response.text}",
+        )
+
+    data = response.json()
+    script = data["choices"][0]["message"]["content"].strip()
+    logger.info(f"Script generated from content: {len(script.split())} words")
+    return script
