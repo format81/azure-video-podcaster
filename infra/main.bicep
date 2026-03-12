@@ -10,13 +10,7 @@ targetScope = 'resourceGroup'
 @minLength(3)
 param baseName string = 'videopodcaster'
 
-@description('Azure region - MUST be a region that supports TTS Avatar')
-@allowed([
-  'westeurope'
-  'westus2'
-  'southeastasia'
-  'swedencentral'
-])
+@description('Azure region - must support TTS Avatar (westeurope, westus2, southeastasia, swedencentral)')
 param location string = 'westeurope'
 
 @description('Container image tag')
@@ -95,6 +89,14 @@ resource blobService 'Microsoft.Storage/storageAccounts/blobServices@2023-05-01'
 resource podcastContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = {
   parent: blobService
   name: 'podcast-videos'
+  properties: {
+    publicAccess: 'None'
+  }
+}
+
+resource backgroundsContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = {
+  parent: blobService
+  name: 'podcast-backgrounds'
   properties: {
     publicAccess: 'None'
   }
@@ -260,6 +262,10 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
             {
               name: 'AZURE_STORAGE_CONTAINER'
               value: 'podcast-videos'
+            }
+            {
+              name: 'AZURE_STORAGE_BACKGROUNDS_CONTAINER'
+              value: 'podcast-backgrounds'
             }
             {
               name: 'AVATAR_CHARACTER'

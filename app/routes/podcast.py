@@ -4,7 +4,7 @@ import logging
 import re
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, UploadFile
 
 from app.config import (
     DEFAULT_AVATAR_CHARACTER,
@@ -17,7 +17,7 @@ from app.config import (
     STANDARD_AVATARS,
 )
 from app.middleware import check_rate_limit, verify_api_key
-from app.models import ContentRequest, PodcastListResponse, PodcastRequest, PodcastStatus, TopicRequest
+from app.models import BackgroundUploadResponse, ContentRequest, PodcastListResponse, PodcastRequest, PodcastStatus, TopicRequest
 from app.services.openai import generate_script, generate_script_from_content, is_openai_configured
 from app.services.speech import (
     delete_synthesis_job,
@@ -32,6 +32,7 @@ from app.services.storage import (
     generate_sas_url,
     is_storage_configured,
     persist_video_on_complete,
+    upload_background,
 )
 
 logger = logging.getLogger("video-podcaster")
@@ -65,6 +66,41 @@ def _validate_avatar(avatar_char: str, avatar_style: str) -> None:
                 detail=f"Style '{avatar_style}' not available for avatar '{avatar_char}'. "
                        f"Available: {STANDARD_AVATARS[avatar_char]}",
             )
+
+
+_ALLOWED_BACKGROUND_TYPES = {"image/png", "image/jpeg", "image/bmp", "video/mp4", "video/webm"}
+_MAX_BACKGROUND_SIZE = 50 * 1024 * 1024  # 50 MB
+
+
+@router.post("/upload-background", response_model=BackgroundUploadResponse)
+async def upload_background_file(
+    file: UploadFile,
+    _key: str | None = Depends(verify_api_key),
+):
+    """Upload a background image or video for use in podcast generation.
+
+    Supported types: PNG, JPEG, BMP images and MP4, WebM videos.
+    Max file size: 50 MB.
+    Returns a URL to use as background_image_url or background_video_url in generation requests.
+    """
+    if not is_storage_configured():
+        raise HTTPException(status_code=503, detail="Azure Blob Storage is not configured.")
+
+    content_type = file.content_type or ""
+    if content_type not in _ALLOWED_BACKGROUND_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported file type: {content_type}. Allowed: {', '.join(sorted(_ALLOWED_BACKGROUND_TYPES))}",
+        )
+
+    content = await file.read()
+    if len(content) > _MAX_BACKGROUND_SIZE:
+        raise HTTPException(status_code=400, detail="File too large. Maximum size is 50 MB.")
+
+    filename = file.filename or "background"
+    sas_url, blob_name = upload_background(content, filename, content_type)
+
+    return BackgroundUploadResponse(url=sas_url, blob_name=blob_name, content_type=content_type)
 
 
 @router.post("/generate", response_model=PodcastStatus)
@@ -169,6 +205,8 @@ async def generate_from_topic(
         avatar_character=request.avatar_character,
         avatar_style=request.avatar_style,
         background_color=request.background_color,
+        background_image_url=request.background_image_url,
+        background_video_url=request.background_video_url,
         subtitle=request.subtitle,
         video_format=request.video_format,
         video_codec=request.video_codec,
@@ -222,6 +260,8 @@ async def generate_from_content(
         avatar_character=request.avatar_character,
         avatar_style=request.avatar_style,
         background_color=request.background_color,
+        background_image_url=request.background_image_url,
+        background_video_url=request.background_video_url,
         subtitle=request.subtitle,
         video_format=request.video_format,
         video_codec=request.video_codec,

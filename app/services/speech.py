@@ -94,19 +94,28 @@ def submit_avatar_synthesis(job_id: str, request: PodcastRequest) -> dict:
 
     url = f"{SPEECH_ENDPOINT}/avatar/batchsyntheses/{job_id}?api-version={API_VERSION}"
 
+    avatar_config = {
+        "talkingAvatarCharacter": avatar_character,
+        "talkingAvatarStyle": avatar_style,
+        "videoFormat": request.video_format or "mp4",
+        "videoCodec": request.video_codec or "h264",
+        "subtitleType": "soft_embedded" if request.subtitle else "none",
+        "videoBitrate": 2000000,
+    }
+
+    # Background: image > video > color (priority order)
+    if request.background_image_url:
+        avatar_config["backgroundImage"] = request.background_image_url
+    elif request.background_video_url:
+        avatar_config["backgroundVideo"] = request.background_video_url
+    else:
+        avatar_config["backgroundColor"] = request.background_color or "#FFFFFFFF"
+
     payload = {
         "inputKind": input_kind,
         "inputs": [{"content": content}],
         "synthesisConfig": {"voice": voice},
-        "avatarConfig": {
-            "talkingAvatarCharacter": avatar_character,
-            "talkingAvatarStyle": avatar_style,
-            "videoFormat": request.video_format or "mp4",
-            "videoCodec": request.video_codec or "h264",
-            "subtitleType": "soft_embedded" if request.subtitle else "none",
-            "backgroundColor": request.background_color or "#FFFFFFFF",
-            "videoBitrate": 2000000,
-        },
+        "avatarConfig": avatar_config,
         "properties": {"timeToLiveInHours": 48},
     }
 

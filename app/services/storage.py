@@ -12,6 +12,7 @@ from app.config import (
     MANAGED_IDENTITY_CLIENT_ID,
     SAS_EXPIRY_HOURS,
     STORAGE_ACCOUNT_NAME,
+    STORAGE_BACKGROUNDS_CONTAINER,
     STORAGE_CONNECTION_STRING,
     STORAGE_CONTAINER,
 )
@@ -81,12 +82,14 @@ def upload_video_from_url(job_id: str, video_url: str) -> str:
     return blob_name
 
 
-def generate_sas_url(blob_name: str) -> str:
-    """Generate a SAS URL for downloading a video blob.
+def generate_sas_url(blob_name: str, container_name: str | None = None, expiry_hours: int | None = None) -> str:
+    """Generate a SAS URL for downloading a blob.
 
     Uses account key (from connection string) if available,
     otherwise uses user delegation key via Managed Identity.
     """
+    container = container_name or STORAGE_CONTAINER
+    hours = expiry_hours or SAS_EXPIRY_HOURS
     client = get_blob_service_client()
     account_name = client.account_name
 
@@ -99,23 +102,23 @@ def generate_sas_url(blob_name: str) -> str:
 
         sas_token = generate_blob_sas(
             account_name=account_name,
-            container_name=STORAGE_CONTAINER,
+            container_name=container,
             blob_name=blob_name,
             account_key=account_key,
             permission=BlobSasPermissions(read=True),
-            expiry=datetime.now(timezone.utc) + timedelta(hours=SAS_EXPIRY_HOURS),
+            expiry=datetime.now(timezone.utc) + timedelta(hours=hours),
         )
     else:
         from azure.storage.blob import BlobSasPermissions, generate_blob_sas
 
         # Use user delegation key (Managed Identity)
         start_time = datetime.now(timezone.utc)
-        expiry_time = start_time + timedelta(hours=SAS_EXPIRY_HOURS)
+        expiry_time = start_time + timedelta(hours=hours)
         delegation_key = client.get_user_delegation_key(start_time, expiry_time)
 
         sas_token = generate_blob_sas(
             account_name=account_name,
-            container_name=STORAGE_CONTAINER,
+            container_name=container,
             blob_name=blob_name,
             user_delegation_key=delegation_key,
             permission=BlobSasPermissions(read=True),
@@ -123,7 +126,7 @@ def generate_sas_url(blob_name: str) -> str:
             start=start_time,
         )
 
-    return f"https://{account_name}.blob.core.windows.net/{STORAGE_CONTAINER}/{blob_name}?{sas_token}"
+    return f"https://{account_name}.blob.core.windows.net/{container}/{blob_name}?{sas_token}"
 
 
 def persist_video_on_complete(job_id: str, video_url: str, jobs_tracker: dict[str, dict]) -> None:
@@ -138,3 +141,36 @@ def persist_video_on_complete(job_id: str, video_url: str, jobs_tracker: dict[st
         logger.info(f"Video persisted for job {job_id}: {download_url}")
     except Exception as e:
         logger.error(f"Failed to persist video for job {job_id}: {e}")
+
+
+def upload_background(file_content: bytes, filename: str, content_type: str) -> tuple[str, str]:
+    """Upload a background image or video to blob storage.
+
+    Returns (sas_url, blob_name).
+    """
+    import uuid
+
+    from azure.storage.blob import ContentSettings
+
+    client = get_blob_service_client()
+    container_client = client.get_container_client(STORAGE_BACKGROUNDS_CONTAINER)
+
+    # Ensure container exists
+    try:
+        container_client.create_container()
+    except Exception:
+        pass  # Container already exists
+
+    blob_name = f"backgrounds/{uuid.uuid4().hex[:8]}-{filename}"
+    blob_client = container_client.get_blob_client(blob_name)
+
+    blob_client.upload_blob(
+        file_content,
+        overwrite=True,
+        content_settings=ContentSettings(content_type=content_type),
+    )
+    logger.info(f"Uploaded background: {blob_name} ({content_type})")
+
+    # SAS with 30-day expiry so it's valid when Azure Speech API fetches it
+    sas_url = generate_sas_url(blob_name, container_name=STORAGE_BACKGROUNDS_CONTAINER, expiry_hours=720)
+    return sas_url, blob_name
