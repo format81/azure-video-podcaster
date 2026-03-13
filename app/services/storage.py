@@ -85,33 +85,21 @@ def upload_video_from_url(job_id: str, video_url: str) -> str:
 def generate_sas_url(blob_name: str, container_name: str | None = None, expiry_hours: int | None = None) -> str:
     """Generate a SAS URL for downloading a blob.
 
-    Uses account key (from connection string) if available,
-    otherwise uses user delegation key via Managed Identity.
+    Uses user delegation key via Managed Identity (recommended, no shared keys needed).
+    Falls back to account key from connection string if configured.
+
+    Managed Identity requires the 'Storage Blob Delegator' role on the storage account.
     """
+    from azure.storage.blob import BlobSasPermissions, generate_blob_sas
+
     container = container_name or STORAGE_CONTAINER
     hours = expiry_hours or SAS_EXPIRY_HOURS
     client = get_blob_service_client()
     account_name = client.account_name
 
-    if STORAGE_CONNECTION_STRING:
-        from azure.storage.blob import BlobSasPermissions, generate_blob_sas
-
-        # Extract account key from connection string
-        parts = dict(part.split("=", 1) for part in STORAGE_CONNECTION_STRING.split(";") if "=" in part)
-        account_key = parts.get("AccountKey", "")
-
-        sas_token = generate_blob_sas(
-            account_name=account_name,
-            container_name=container,
-            blob_name=blob_name,
-            account_key=account_key,
-            permission=BlobSasPermissions(read=True),
-            expiry=datetime.now(timezone.utc) + timedelta(hours=hours),
-        )
-    else:
-        from azure.storage.blob import BlobSasPermissions, generate_blob_sas
-
-        # Use user delegation key (Managed Identity)
+    if not STORAGE_CONNECTION_STRING:
+        # Use user delegation key (Managed Identity) - no shared keys needed
+        logger.info("Generating user delegation SAS (Managed Identity)")
         start_time = datetime.now(timezone.utc)
         expiry_time = start_time + timedelta(hours=hours)
         delegation_key = client.get_user_delegation_key(start_time, expiry_time)
@@ -124,6 +112,20 @@ def generate_sas_url(blob_name: str, container_name: str | None = None, expiry_h
             permission=BlobSasPermissions(read=True),
             expiry=expiry_time,
             start=start_time,
+        )
+    else:
+        # Fallback: extract account key from connection string
+        logger.info("Generating account-key SAS (connection string)")
+        parts = dict(part.split("=", 1) for part in STORAGE_CONNECTION_STRING.split(";") if "=" in part)
+        account_key = parts.get("AccountKey", "")
+
+        sas_token = generate_blob_sas(
+            account_name=account_name,
+            container_name=container,
+            blob_name=blob_name,
+            account_key=account_key,
+            permission=BlobSasPermissions(read=True),
+            expiry=datetime.now(timezone.utc) + timedelta(hours=hours),
         )
 
     return f"https://{account_name}.blob.core.windows.net/{container}/{blob_name}?{sas_token}"

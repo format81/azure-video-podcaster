@@ -113,6 +113,17 @@ resource storageRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-
   }
 }
 
+// Storage Blob Delegator role for managed identity (required for user delegation SAS keys)
+resource storageDelegatorRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(storageAccount.id, managedIdentity.id, 'storage-blob-delegator')
+  scope: storageAccount
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'db58b8e5-c6ad-4a2a-8342-4190687cbf4a')
+    principalId: managedIdentity.properties.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
 // --- Azure OpenAI (optional) ---
 
 resource openaiService 'Microsoft.CognitiveServices/accounts@2024-10-01' = if (deployOpenAI) {
