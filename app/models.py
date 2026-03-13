@@ -77,6 +77,6 @@ class ContentRequest(BaseModel):
 
 class BackgroundUploadResponse(BaseModel):
     """Response after uploading a background image or video."""
-    url: str = Field(..., description="SAS URL of the uploaded background file")
+    url: str = Field(..., description="Proxy URL of the uploaded background file")
     blob_name: str = Field(..., description="Blob name in storage")
     content_type: str = Field(..., description="MIME type of the uploaded file")

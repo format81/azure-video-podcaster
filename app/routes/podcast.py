@@ -4,7 +4,7 @@ import logging
 import re
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response, UploadFile
 
 from app.config import (
     DEFAULT_AVATAR_CHARACTER,
@@ -29,6 +29,7 @@ from app.services.speech import (
     submit_avatar_synthesis,
 )
 from app.services.storage import (
+    download_background_blob,
     generate_sas_url,
     is_storage_configured,
     persist_video_on_complete,
@@ -75,13 +76,15 @@ _MAX_BACKGROUND_SIZE = 50 * 1024 * 1024  # 50 MB
 @router.post("/upload-background", response_model=BackgroundUploadResponse)
 async def upload_background_file(
     file: UploadFile,
+    req: Request,
     _key: str | None = Depends(verify_api_key),
 ):
     """Upload a background image or video for use in podcast generation.
 
     Supported types: PNG, JPEG, BMP images and MP4, WebM videos.
     Max file size: 50 MB.
-    Returns a URL to use as background_image_url or background_video_url in generation requests.
+    Returns a proxy URL to use as background_image_url or background_video_url in generation requests.
+    The proxy URL serves the blob via the app's Managed Identity (no SAS token needed).
     """
     if not is_storage_configured():
         raise HTTPException(status_code=503, detail="Azure Blob Storage is not configured.")
@@ -98,9 +101,37 @@ async def upload_background_file(
         raise HTTPException(status_code=400, detail="File too large. Maximum size is 50 MB.")
 
     filename = file.filename or "background"
-    sas_url, blob_name = upload_background(content, filename, content_type)
+    blob_name = upload_background(content, filename, content_type)
 
-    return BackgroundUploadResponse(url=sas_url, blob_name=blob_name, content_type=content_type)
+    # Build proxy URL that Azure Speech API can fetch without SAS
+    base_url = str(req.base_url).rstrip("/")
+    proxy_url = f"{base_url}/podcast/backgrounds/{blob_name}"
+
+    return BackgroundUploadResponse(url=proxy_url, blob_name=blob_name, content_type=content_type)
+
+
+@router.get("/backgrounds/{blob_name:path}")
+async def serve_background(blob_name: str):
+    """Serve a background blob via the app's Managed Identity.
+
+    This proxy endpoint allows Azure Speech API to access background files
+    without SAS tokens. The app reads the blob using its Managed Identity
+    and returns the content directly.
+    """
+    if not is_storage_configured():
+        raise HTTPException(status_code=503, detail="Azure Blob Storage is not configured.")
+
+    try:
+        content, content_type = download_background_blob(blob_name)
+    except Exception as e:
+        logger.error(f"Failed to serve background blob '{blob_name}': {e}")
+        raise HTTPException(status_code=404, detail="Background file not found.")
+
+    return Response(
+        content=content,
+        media_type=content_type,
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
 
 
 @router.post("/generate", response_model=PodcastStatus)

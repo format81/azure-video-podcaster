@@ -145,10 +145,11 @@ def persist_video_on_complete(job_id: str, video_url: str, jobs_tracker: dict[st
         logger.error(f"Failed to persist video for job {job_id}: {e}")
 
 
-def upload_background(file_content: bytes, filename: str, content_type: str) -> tuple[str, str]:
+def upload_background(file_content: bytes, filename: str, content_type: str) -> str:
     """Upload a background image or video to blob storage.
 
-    Returns (sas_url, blob_name).
+    Returns the blob_name. The caller is responsible for building
+    the public URL (proxy endpoint or SAS).
     """
     import uuid
 
@@ -173,6 +174,16 @@ def upload_background(file_content: bytes, filename: str, content_type: str) -> 
     )
     logger.info(f"Uploaded background: {blob_name} ({content_type})")
 
-    # SAS with 30-day expiry so it's valid when Azure Speech API fetches it
-    sas_url = generate_sas_url(blob_name, container_name=STORAGE_BACKGROUNDS_CONTAINER, expiry_hours=720)
-    return sas_url, blob_name
+    return blob_name
+
+
+def download_background_blob(blob_name: str) -> tuple[bytes, str]:
+    """Download a background blob and return (content, content_type).
+
+    Uses Managed Identity / connection string — no SAS needed.
+    """
+    client = get_blob_service_client()
+    blob_client = client.get_blob_client(STORAGE_BACKGROUNDS_CONTAINER, blob_name)
+    download = blob_client.download_blob()
+    content_type = download.properties.content_settings.content_type or "application/octet-stream"
+    return download.readall(), content_type
