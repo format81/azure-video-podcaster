@@ -14,6 +14,8 @@ class PodcastRequest(BaseModel):
     avatar_character: Optional[str] = Field(None, description="Avatar character (e.g., lisa, harry, jeff)")
     avatar_style: Optional[str] = Field(None, description="Avatar style (e.g., casual-sitting)")
     background_color: Optional[str] = Field("#FFFFFFFF", description="Background color (hex ARGB)")
+    background_image_url: Optional[str] = Field(None, description="Background image URL (overrides background_color)")
+    background_video_url: Optional[str] = Field(None, description="Background video URL (overrides background_color)")
     subtitle: Optional[bool] = Field(True, description="Enable embedded subtitles")
     video_format: Optional[str] = Field("mp4", description="Video format: mp4 or webm")
     video_codec: Optional[str] = Field("h264", description="Video codec: h264, hevc, av1, vp9")
@@ -49,6 +51,8 @@ class TopicRequest(BaseModel):
     avatar_character: Optional[str] = Field(None, description="Avatar character")
     avatar_style: Optional[str] = Field(None, description="Avatar style")
     background_color: Optional[str] = Field("#FFFFFFFF", description="Background color")
+    background_image_url: Optional[str] = Field(None, description="Background image URL (overrides background_color)")
+    background_video_url: Optional[str] = Field(None, description="Background video URL (overrides background_color)")
     subtitle: Optional[bool] = Field(True, description="Enable embedded subtitles")
     video_format: Optional[str] = Field("mp4", description="Video format")
     video_codec: Optional[str] = Field("h264", description="Video codec")
@@ -64,6 +68,15 @@ class ContentRequest(BaseModel):
     avatar_character: Optional[str] = Field(None, description="Avatar character")
     avatar_style: Optional[str] = Field(None, description="Avatar style")
     background_color: Optional[str] = Field("#FFFFFFFF", description="Background color")
+    background_image_url: Optional[str] = Field(None, description="Background image URL (overrides background_color)")
+    background_video_url: Optional[str] = Field(None, description="Background video URL (overrides background_color)")
     subtitle: Optional[bool] = Field(True, description="Enable embedded subtitles")
     video_format: Optional[str] = Field("mp4", description="Video format")
     video_codec: Optional[str] = Field("h264", description="Video codec")
+
+
+class BackgroundUploadResponse(BaseModel):
+    """Response after uploading a background image or video."""
+    url: str = Field(..., description="SAS URL of the uploaded background file")
+    blob_name: str = Field(..., description="Blob name in storage")
+    content_type: str = Field(..., description="MIME type of the uploaded file")

@@ -12,6 +12,7 @@ API_VERSION = "2024-08-01"
 STORAGE_CONNECTION_STRING = os.getenv("AZURE_STORAGE_CONNECTION_STRING", "")  # Optional: leave empty to use Managed Identity
 STORAGE_ACCOUNT_NAME = os.getenv("AZURE_STORAGE_ACCOUNT_NAME", "")
 STORAGE_CONTAINER = os.getenv("AZURE_STORAGE_CONTAINER", "podcast-videos")
+STORAGE_BACKGROUNDS_CONTAINER = os.getenv("AZURE_STORAGE_BACKGROUNDS_CONTAINER", "podcast-backgrounds")
 
 # Azure OpenAI (optional - auth via Managed Identity, API key is optional fallback)
 AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT", "")
