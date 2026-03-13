@@ -111,12 +111,13 @@ async def upload_background_file(
 
 
 @router.get("/backgrounds/{blob_name:path}")
+@router.head("/backgrounds/{blob_name:path}")
 async def serve_background(blob_name: str):
     """Serve a background blob via the app's Managed Identity.
 
     This proxy endpoint allows Azure Speech API to access background files
     without SAS tokens. The app reads the blob using its Managed Identity
-    and returns the content directly.
+    and returns the content directly. Supports both GET and HEAD methods.
     """
     if not is_storage_configured():
         raise HTTPException(status_code=503, detail="Azure Blob Storage is not configured.")
@@ -130,7 +131,10 @@ async def serve_background(blob_name: str):
     return Response(
         content=content,
         media_type=content_type,
-        headers={"Cache-Control": "public, max-age=86400"},
+        headers={
+            "Cache-Control": "public, max-age=86400",
+            "Content-Length": str(len(content)),
+        },
     )
 
 
